@@ -1,0 +1,43 @@
+import type { Texture } from './model';
+
+export interface PaletteYarn { name: string; color: string; texture: Texture; color2?: string }
+
+/** WoolDoodle's built-in generic shades (not tied to any yarn brand). */
+export const PALETTE: PaletteYarn[] = [
+  { name: 'Снежный', color: '#f6f2ea', texture: 'solid' },
+  { name: 'Молочный', color: '#efe6d2', texture: 'solid' },
+  { name: 'Овсяный', color: '#dccfb4', texture: 'heather' },
+  { name: 'Песок', color: '#c9b189', texture: 'solid' },
+  { name: 'Верблюжий', color: '#b08a57', texture: 'heather' },
+  { name: 'Каштан', color: '#6f4630', texture: 'solid' },
+  { name: 'Шоколад', color: '#43302a', texture: 'heather' },
+  { name: 'Светло-серый', color: '#c4c3bf', texture: 'heather' },
+  { name: 'Серый камень', color: '#8b8c8c', texture: 'heather' },
+  { name: 'Графит', color: '#3b3f46', texture: 'heather' },
+  { name: 'Уголь', color: '#1f1f23', texture: 'solid' },
+  { name: 'Лимон', color: '#ecd24a', texture: 'solid' },
+  { name: 'Горчица', color: '#d3a02c', texture: 'heather' },
+  { name: 'Тыква', color: '#dd7a2b', texture: 'solid' },
+  { name: 'Терракота', color: '#b9593a', texture: 'tweed' },
+  { name: 'Брусника', color: '#b23a3a', texture: 'solid' },
+  { name: 'Малина', color: '#c2334d', texture: 'solid' },
+  { name: 'Вишня', color: '#7c2233', texture: 'heather' },
+  { name: 'Пыльная роза', color: '#d79a9c', texture: 'solid' },
+  { name: 'Пион', color: '#e06b93', texture: 'solid' },
+  { name: 'Слива', color: '#6d3a66', texture: 'heather' },
+  { name: 'Лаванда', color: '#a493c9', texture: 'solid' },
+  { name: 'Чернила', color: '#3d3470', texture: 'solid' },
+  { name: 'Ночной синий', color: '#27375a', texture: 'solid' },
+  { name: 'Джинс', color: '#4f6f9c', texture: 'heather' },
+  { name: 'Небо', color: '#9cc3de', texture: 'solid' },
+  { name: 'Бирюза', color: '#3aa3a0', texture: 'solid' },
+  { name: 'Морская волна', color: '#2f6f73', texture: 'solid' },
+  { name: 'Хвоя', color: '#27503f', texture: 'heather' },
+  { name: 'Трава', color: '#5e9b4b', texture: 'solid' },
+  { name: 'Шалфей', color: '#8aa38b', texture: 'solid' },
+  { name: 'Олива', color: '#7b7a3a', texture: 'tweed' },
+  { name: 'Мох', color: '#4d5a32', texture: 'tweed' },
+  { name: 'Соль и перец', color: '#2c2c33', texture: 'marl', color2: '#e9e4d8' },
+  { name: 'Морозный синий', color: '#2f4a7a', texture: 'marl', color2: '#d9e3ee' },
+  { name: 'Ягодный микс', color: '#9a2f4a', texture: 'marl', color2: '#e6b7a8' },
+];
