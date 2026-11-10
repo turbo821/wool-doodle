@@ -25,7 +25,7 @@ export function LibraryDialog({ onClose, confirmDiscard }: { onClose: () => void
   return (
     <Modal title="Мои узоры" onClose={onClose} wide>
       {items.length === 0 ? (
-        <p className="empty">Здесь появятся узоры, сохранённые в этом браузере. Нажмите «Сохранить» (Ctrl+S), чтобы добавить текущий.</p>
+        <p className="empty">Здесь появятся узоры, сохранённые на этом устройстве. Нажмите «Сохранить» (Ctrl+S), чтобы добавить текущий.</p>
       ) : (
         <ul className="library">
           {items.map((d) => (

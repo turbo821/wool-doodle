@@ -31,7 +31,7 @@ export function App() {
     window.setTimeout(() => setNotice((n) => (n === msg ? '' : n)), 2600);
   };
 
-  const save = () => flash(store.save() ? 'Узор сохранён в библиотеку этого браузера' : 'Не удалось сохранить: хранилище браузера недоступно или переполнено');
+  const save = () => flash(store.save() ? 'Узор сохранён в «Мои узоры» на этом устройстве' : 'Не удалось сохранить: локальное хранилище недоступно или переполнено');
 
   const confirmDiscard = () =>
     !store.get().undo.length || store.get().design === store.get().saved ||
