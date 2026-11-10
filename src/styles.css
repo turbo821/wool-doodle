@@ -212,3 +212,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   /* Fixed height: a panel that sized to its canvas would feed back into "fit to panel". */
   .panel { height: 70vh; min-height: 340px; flex: none; }
 }
+
+.preview-scroll { cursor: grab; touch-action: none; }
+.preview-scroll.panning { cursor: grabbing; user-select: none; }

@@ -40,6 +40,9 @@ export function PreviewCanvas() {
   const sw = zoom === 'fit' ? fit : zoom;
   const swRef = useRef(sw);
   swRef.current = sw;
+  const anchor = useRef<{ fx: number; fy: number; px: number; py: number } | null>(null);
+  const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const [panning, setPanning] = useState(false);
 
   useEffect(() => {
     const c = canvas.current!;
@@ -48,21 +51,58 @@ export function PreviewCanvas() {
       const { width, height } = drawSwatch(c, design, sw, dpr, turn);
       c.style.width = `${width / dpr}px`;
       c.style.height = `${height / dpr}px`;
+      // After a wheel zoom, keep the point that was under the cursor under the cursor.
+      const a = anchor.current;
+      const el = wrap.current;
+      if (a && el) {
+        anchor.current = null;
+        el.scrollLeft = c.offsetLeft + a.fx * c.offsetWidth - a.px;
+        el.scrollTop = c.offsetTop + a.fy * c.offsetHeight - a.py;
+      }
     });
     return () => cancelAnimationFrame(id);
   }, [design, sw, turn]);
 
-  // Ctrl + wheel zooms; needs a non-passive listener to stop the browser's own page zoom.
+  // The wheel zooms towards the cursor. A non-passive listener is needed to stop the page scrolling.
   useEffect(() => {
     const el = wrap.current!;
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.deltaY === 0) return;
       e.preventDefault();
-      setZoom(clamp(Math.round(swRef.current * (e.deltaY < 0 ? 1.15 : 1 / 1.15) * 10) / 10, MIN, MAX));
+      const next = clamp(Math.round(swRef.current * (e.deltaY < 0 ? 1.15 : 1 / 1.15) * 10) / 10, MIN, MAX);
+      if (next === swRef.current) return;
+      const c = canvas.current!;
+      const cr = c.getBoundingClientRect(), wr = el.getBoundingClientRect();
+      anchor.current = {
+        fx: (e.clientX - cr.left) / cr.width,
+        fy: (e.clientY - cr.top) / cr.height,
+        px: e.clientX - wr.left,
+        py: e.clientY - wr.top,
+      };
+      setZoom(next);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
+
+  // Dragging pans the swatch.
+  const onPanDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.button !== 1) return;
+    const el = e.currentTarget;
+    pan.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    el.setPointerCapture(e.pointerId);
+    setPanning(true);
+  };
+  const onPanMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const p = pan.current;
+    if (!p) return;
+    e.currentTarget.scrollLeft = p.left - (e.clientX - p.x);
+    e.currentTarget.scrollTop = p.top - (e.clientY - p.y);
+  };
+  const onPanUp = () => {
+    pan.current = null;
+    setPanning(false);
+  };
 
   const step = (f: number) => setZoom(clamp(Math.round(sw * f * 10) / 10, MIN, MAX));
 
@@ -92,8 +132,8 @@ export function PreviewCanvas() {
           )}
         </div>
         <div className="bar-group end">
-          <button className="icon-btn" title="Мельче (Ctrl + колесо)" onClick={() => step(1 / 1.25)}><Icon name="minus" /></button>
-          <button className="icon-btn" title="Крупнее (Ctrl + колесо)" onClick={() => step(1.25)}><Icon name="plus" /></button>
+          <button className="icon-btn" title="Мельче (колесо мыши)" onClick={() => step(1 / 1.25)}><Icon name="minus" /></button>
+          <button className="icon-btn" title="Крупнее (колесо мыши)" onClick={() => step(1.25)}><Icon name="plus" /></button>
           <button className={`btn small${zoom === 'fit' ? ' active' : ''}`} onClick={() => setZoom('fit')}>Вписать</button>
           {!round && (
             <button
@@ -106,7 +146,14 @@ export function PreviewCanvas() {
           )}
         </div>
       </header>
-      <div className="preview-scroll" ref={wrap}>
+      <div
+        className={`preview-scroll${panning ? ' panning' : ''}`}
+        ref={wrap}
+        onPointerDown={onPanDown}
+        onPointerMove={onPanMove}
+        onPointerUp={onPanUp}
+        onPointerCancel={onPanUp}
+      >
         <canvas ref={canvas} className="preview-canvas" id="swatch-canvas" />
       </div>
       {round && (
