@@ -181,8 +181,114 @@ export function swatchLayout(d: Design, swCss: number, dpr: number): SwatchLayou
   return { sw, sh, tc, tr, padX, padT, W: tc * sw + padX * 2, H: tr * sh + padT + padB };
 }
 
+const backingColours = (d: Design) =>
+  d.yarns.map((y) => {
+    const [h, s, l] = rgbToHsl(hexToRgb(y.color));
+    return hslCss(h, s * 0.8, l * 0.42);
+  });
+
+/* ---------- round shapes (yokes, hat crowns) ---------- */
+
+/**
+ * Geometry of the round layout for a stitch of sw × sh (any unit).
+ * Rows become rings: the top chart row is the innermost ring, the bottom row the outer edge.
+ * The wedge opens downwards, so the chart reads the same way up as on the flat grid.
+ */
+export function roundGeometry(d: Design, sw: number, sh: number) {
+  const N = d.around;
+  let reps = d.shape === 'circle' ? N : Math.min(d.repeatX, N);
+  while (reps > 1 && reps * d.cols * d.rows > MAX_STITCHES * 2) reps--;
+  const angle = (2 * Math.PI * reps) / N;
+  // Inner radius: the first non-empty row keeps its natural stitch width.
+  let kTop = d.cols;
+  for (let y = 0; y < d.rows; y++) {
+    let k = 0;
+    for (let x = 0; x < d.cols; x++) if (d.cells[y * d.cols + x]) k++;
+    if (k) { kTop = k; break; }
+  }
+  const r0 = Math.max((N * kTop * sw) / (2 * Math.PI), sw * 2);
+  const R = r0 + d.rows * sh;
+  const pad = sw * 0.6 + sh * 0.4;
+  const half = angle / 2;
+  const xExt = half >= Math.PI / 2 ? R : R * Math.sin(half);
+  const yMin = half >= Math.PI - 1e-9 ? -R : half <= Math.PI / 2 ? r0 * Math.cos(half) : R * Math.cos(half);
+  const W = 2 * xExt + 2 * pad, H = R - yMin + 2 * pad;
+  return { reps, angle, r0, R, W, H, cx: W / 2, cy: pad - yMin };
+}
+
+function drawRound(canvas: HTMLCanvasElement, d: Design, swCss: number, dpr: number) {
+  const aspect = d.gauge.sts / d.gauge.rows;
+  let sw = Math.max(2, Math.floor(swCss * dpr));
+  let sh = Math.max(2, Math.round(sw * aspect));
+  let g = roundGeometry(d, sw, sh);
+  if (Math.max(g.W, g.H) > MAX_CANVAS) {
+    sw = Math.max(2, Math.floor((sw * MAX_CANVAS) / Math.max(g.W, g.H)));
+    sh = Math.max(2, Math.round(sw * aspect));
+    g = roundGeometry(d, sw, sh);
+  }
+  canvas.width = Math.ceil(g.W);
+  canvas.height = Math.ceil(g.H);
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const sprites = d.yarns.map((y) => spritesFor(y, sw, sh));
+  const backing = backingColours(d);
+  const wedge = g.angle / g.reps;
+
+  // Each row lists its real stitches; empty cells are "no stitch", so decreased rows get narrower.
+  const rows = Array.from({ length: d.rows }, (_, y) => {
+    const st: number[] = [];
+    for (let x = 0; x < d.cols; x++) {
+      const v = d.cells[y * d.cols + x];
+      if (v) st.push(v);
+    }
+    return st;
+  });
+
+  const pass = (sprite: boolean) => {
+    // Outer ring (bottom chart row) first, so each ring overlaps the one knitted before it.
+    for (let y = d.rows - 1; y >= 0; y--) {
+      const st = rows[y];
+      if (!st.length) continue;
+      const rTop = g.r0 + y * sh;
+      const step = wedge / st.length;
+      const sx = ((rTop + sh / 2) * step) / sw; // horizontal stretch to fill the ring
+      for (let rep = 0; rep < g.reps; rep++) {
+        for (let i = 0; i < st.length; i++) {
+          const phi = g.angle / 2 - (rep * wedge + (i + 0.5) * step);
+          const c = Math.cos(phi), s = Math.sin(phi);
+          ctx.setTransform(c * sx, s * sx, -s, c, g.cx, g.cy);
+          const v = st[i];
+          if (sprite) {
+            const sp = sprites[v - 1][(i * 7 + y * 13 + rep * 3) % VARIANTS];
+            ctx.drawImage(sp.canvas, -sw / 2 - sp.ox, rTop - sp.oy);
+          } else {
+            ctx.fillStyle = backing[v - 1];
+            ctx.fillRect(-sw / 2 - 1, rTop, sw + 2, sh + 1);
+          }
+        }
+      }
+    }
+  };
+  pass(false);
+  pass(true);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  return { width: canvas.width, height: canvas.height };
+}
+
+/** Size of the rendered swatch in stitch widths (i.e. for a stitch 1 unit wide), padding included. */
+export function swatchExtent(d: Design): { w: number; h: number } {
+  const aspect = d.gauge.sts / d.gauge.rows;
+  if (d.shape !== 'flat') {
+    const g = roundGeometry(d, 1, aspect);
+    return { w: g.W, h: g.H };
+  }
+  return { w: d.cols * d.repeatX + 0.8, h: (d.rows * d.repeatY + 1) * aspect + 0.8 };
+}
+
 /** Renders the knitted swatch into `canvas`, resizing it. Returns the canvas size in device pixels. */
 export function drawSwatch(canvas: HTMLCanvasElement, d: Design, swCss: number, dpr: number, rotated: boolean) {
+  if (d.shape !== 'flat') return drawRound(canvas, d, swCss, dpr);
   const L = swatchLayout(d, swCss, dpr);
   const { sw, sh, tc, tr, padX, padT, W, H } = L;
   canvas.width = rotated ? H : W;
@@ -195,10 +301,7 @@ export function drawSwatch(canvas: HTMLCanvasElement, d: Design, swCss: number, 
   }
 
   const sprites = d.yarns.map((y) => spritesFor(y, sw, sh));
-  const backing = d.yarns.map((y) => {
-    const [h, s, l] = rgbToHsl(hexToRgb(y.color));
-    return hslCss(h, s * 0.8, l * 0.42);
-  });
+  const backing = backingColours(d);
 
   // Pass 1: shadowed backing so gaps between stitches read as yarn, not as page.
   for (let ty = 0; ty < tr; ty++) {

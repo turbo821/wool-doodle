@@ -30,8 +30,14 @@ export interface Design {
   gauge: Gauge;
   repeatX: number;
   repeatY: number;
+  /** How the swatch is laid out: flat fabric, or rings around a centre (yokes, hat crowns). */
+  shape: Shape;
+  /** Round shapes: how many chart repeats make the full circle. */
+  around: number;
   updatedAt: number;
 }
+
+export type Shape = 'flat' | 'arc' | 'circle';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 export interface Patch { w: number; h: number; cells: number[] }
@@ -40,6 +46,7 @@ export interface Point { x: number; y: number }
 export const MAX_SIZE = 200;
 export const MAX_YARNS = 12;
 export const MAX_REPEAT = 8;
+export const MAX_AROUND = 60;
 export const SYMBOLS = '123456789ABC';
 
 export const TEXTURE_LABELS: Record<Texture, string> = {
@@ -72,6 +79,8 @@ export function blankDesign(cols = 20, rows = 20): Design {
     gauge: { sts: 20, rows: 20 },
     repeatX: 1,
     repeatY: 1,
+    shape: 'flat',
+    around: 8,
     updatedAt: Date.now(),
   };
 }
@@ -297,6 +306,53 @@ export function countStitches(d: Design): number[] {
   return out;
 }
 
+/**
+ * Marks stitches that sit in a single-colour run longer than `limit` in a row knitted with two or
+ * more colours: the other yarns float behind the work for that whole run. Rows are treated as
+ * knitted in the round, so a run may wrap from the last stitch to the first.
+ */
+export function longFloats(d: Design, limit: number): boolean[] {
+  const mask: boolean[] = new Array(d.cells.length).fill(false);
+  for (let y = 0; y < d.rows; y++) {
+    const at = (x: number) => d.cells[y * d.cols + x];
+    const colours = new Set<number>();
+    for (let x = 0; x < d.cols; x++) if (at(x)) colours.add(at(x));
+    if (colours.size < 2) continue;
+    const runs: { start: number; len: number; v: number }[] = [];
+    for (let x = 0; x < d.cols; ) {
+      let e = x;
+      while (e < d.cols && at(e) === at(x)) e++;
+      runs.push({ start: x, len: e - x, v: at(x) });
+      x = e;
+    }
+    if (runs.length > 1 && runs[0].v === runs[runs.length - 1].v) {
+      const last = runs.pop()!;
+      runs[0] = { start: last.start, len: last.len + runs[0].len, v: last.v };
+    }
+    for (const r of runs)
+      if (r.v > 0 && r.len > limit)
+        for (let i = 0; i < r.len; i++) mask[y * d.cols + ((r.start + i) % d.cols)] = true;
+  }
+  return mask;
+}
+
+/** Adds the mirror images of the points across the chart's vertical and/or horizontal centre line. */
+export function mirrorPoints(pts: Point[], cols: number, rows: number, mx: boolean, my: boolean): Point[] {
+  if (!mx && !my) return pts;
+  const out = pts.slice();
+  if (mx) for (const p of pts) out.push({ x: cols - 1 - p.x, y: p.y });
+  if (my) for (const p of out.slice()) out.push({ x: p.x, y: rows - 1 - p.y });
+  return out;
+}
+
+/**
+ * Rough yarn length for `stitches` stockinette stitches, in metres. Uses the common rule of thumb
+ * that a row takes about 3.5 times its width; floats and tails are not included.
+ */
+export function yarnMeters(stitches: number, gauge: Gauge): number {
+  return (stitches * (10 / gauge.sts) * 3.5) / 100;
+}
+
 /* ---------- (de)serialisation ---------- */
 
 const TEXTURES: Texture[] = ['solid', 'heather', 'tweed', 'marl'];
@@ -339,6 +395,8 @@ export function parseDesign(raw: unknown): Design {
     gauge: { sts: num(g.sts, 20, 4, 60), rows: num(g.rows, 20, 4, 80) },
     repeatX: Math.round(num(o.repeatX, 1, 1, MAX_REPEAT)),
     repeatY: Math.round(num(o.repeatY, 1, 1, MAX_REPEAT)),
+    shape: o.shape === 'arc' || o.shape === 'circle' ? o.shape : 'flat',
+    around: Math.round(num(o.around, 8, 2, MAX_AROUND)),
     updatedAt: num(o.updatedAt, Date.now(), 0, Number.MAX_SAFE_INTEGER),
   };
 }

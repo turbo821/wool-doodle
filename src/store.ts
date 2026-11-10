@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import {
   type Design, type Patch, type Point, type Rect, type Yarn,
-  MAX_REPEAT, MAX_YARNS, clamp, clipRect, deleteCols, deleteRows, fillRect, flipH, flipV, floodFill,
-  fullRect, getPatch, insertCols, insertRows, putPatch, removeYarn, replaceValue, resizeDesign, rotate,
+  type Shape,
+  MAX_AROUND, MAX_REPEAT, MAX_YARNS, clamp, clipRect, deleteCols, deleteRows, fillRect, flipH, flipV, floodFill,
+  fullRect, getPatch, insertCols, insertRows, mirrorPoints, putPatch, removeYarn, replaceValue, resizeDesign, rotate,
   setCells, shiftWrap, uid,
 } from './model';
 import { loadDraft, saveDesign } from './storage';
@@ -30,11 +31,14 @@ export interface AppState {
   floating: Floating | null;
   undo: Design[];
   redo: Design[];
+  /** Brush symmetry: mirror strokes left-right (X) and/or top-bottom (Y). */
+  mirrorX: boolean;
+  mirrorY: boolean;
 }
 
 const HISTORY_LIMIT = 200;
 
-class Store {
+export class Store {
   private state: AppState;
   private listeners = new Set<() => void>();
   private lastTag = '';
@@ -53,6 +57,8 @@ class Store {
       floating: null,
       undo: [],
       redo: [],
+      mirrorX: false,
+      mirrorY: false,
     };
     if (this.state.slot > this.state.design.yarns.length) this.state.slot = this.state.design.yarns.length;
   }
@@ -194,7 +200,9 @@ class Store {
   }
 
   paint(pts: Point[], v: number) {
-    this.stroke(setCells(this.state.design, pts, v));
+    const s = this.state;
+    const d = s.design;
+    this.stroke(setCells(d, mirrorPoints(pts, d.cols, d.rows, s.mirrorX, s.mirrorY), v));
   }
 
   fill(r: Rect, v: number) {
@@ -404,6 +412,16 @@ class Store {
       { ...d, repeatX: clamp(Math.round(x), 1, MAX_REPEAT), repeatY: clamp(Math.round(y), 1, MAX_REPEAT) },
       'repeat',
     );
+  }
+
+  setShape(shape: Shape, around: number) {
+    const d = this.state.design;
+    if (shape === d.shape && around === d.around) return;
+    this.commit({ ...d, shape, around: clamp(Math.round(around), 2, MAX_AROUND) }, 'shape');
+  }
+
+  setMirror(axis: 'x' | 'y', on: boolean) {
+    this.set(axis === 'x' ? { mirrorX: on } : { mirrorY: on });
   }
 
   setMeta(patch: { name?: string; description?: string }) {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MAX_REPEAT, MAX_SIZE, MAX_YARNS, SYMBOLS, TEXTURE_LABELS, type Texture, countStitches, makeYarn } from '../model';
+import { MAX_REPEAT, MAX_SIZE, MAX_YARNS, SYMBOLS, TEXTURE_LABELS, type Texture, countStitches, makeYarn, yarnMeters } from '../model';
 import { PALETTE } from '../palette';
 import { type Tool, store, useApp } from '../store';
 import { Icon } from './Icon';
@@ -14,6 +14,8 @@ const TOOL_INFO: { tool: Tool; label: string; key: string; hint: string }[] = [
 
 function Tools() {
   const tool = useApp((s) => s.tool);
+  const mirrorX = useApp((s) => s.mirrorX);
+  const mirrorY = useApp((s) => s.mirrorY);
   return (
     <section className="side-section">
       <h3>Инструменты</h3>
@@ -29,6 +31,25 @@ function Tools() {
             <span>{t.label}</span>
           </button>
         ))}
+      </div>
+      <div className="row mirror-row">
+        <span className="row-label">Симметрия кисти</span>
+        <button
+          className={`icon-btn${mirrorX ? ' active' : ''}`}
+          aria-pressed={mirrorX}
+          title="Зеркалить мазки слева направо"
+          onClick={() => store.setMirror('x', !mirrorX)}
+        >
+          <Icon name="flipH" />
+        </button>
+        <button
+          className={`icon-btn${mirrorY ? ' active' : ''}`}
+          aria-pressed={mirrorY}
+          title="Зеркалить мазки сверху вниз"
+          onClick={() => store.setMirror('y', !mirrorY)}
+        >
+          <Icon name="flipV" />
+        </button>
       </div>
       <p className="hint">Клавиша <kbd>`</kbd> переключает инструменты, <kbd>Alt</kbd>+клик берёт цвет со схемы.</p>
     </section>
@@ -78,6 +99,9 @@ function Yarns() {
 
       {active && (
         <div className="yarn-edit">
+          <p className="usage" title="Грубая оценка: ряд лицевой глади расходует примерно 3,5 своей ширины. Протяжки и хвосты не учтены.">
+            В одном раппорте: {counts[slot]} п., примерно {yarnMeters(counts[slot], design.gauge).toFixed(1)} м
+          </p>
           <label className="field">
             <span>Название</span>
             <input

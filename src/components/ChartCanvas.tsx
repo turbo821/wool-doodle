@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { type Rect, clamp, inRect, linePoints, normRect } from '../model';
-import { GUTTER, chartSize, drawChart } from '../render/chart';
+import { chartSize, drawChart } from '../render/chart';
 import { store, useApp } from '../store';
 
 type Drag =
@@ -25,12 +25,16 @@ function strokeMarquee(ctx: CanvasRenderingContext2D, r: Rect, cs: number) {
   ctx.setLineDash([]);
 }
 
-export function ChartCanvas({ zoom }: { zoom: number }) {
+export function ChartCanvas({ zoom, floatMask }: { zoom: number; floatMask: boolean[] | null }) {
   const design = useApp((s) => s.design);
   const selection = useApp((s) => s.selection);
   const floating = useApp((s) => s.floating);
   const tool = useApp((s) => s.tool);
   const slot = useApp((s) => s.slot);
+  const mirrorX = useApp((s) => s.mirrorX);
+  const mirrorY = useApp((s) => s.mirrorY);
+  const maskRef = useRef(floatMask);
+  maskRef.current = floatMask;
 
   const ref = useRef<HTMLCanvasElement>(null);
   const drag = useRef<Drag | null>(null);
@@ -49,6 +53,33 @@ export function ChartCanvas({ zoom }: { zoom: number }) {
     const ctx = canvas.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawChart(ctx, s.design, cs);
+
+    const mask = maskRef.current;
+    if (mask && mask.length === s.design.cells.length) {
+      // Long floats: tint the run and underline it.
+      const { cols, rows } = s.design;
+      const bar = Math.max(2, cs * 0.14);
+      for (let y = 0; y < rows; y++)
+        for (let x = 0; x < cols; x++) {
+          if (!mask[y * cols + x]) continue;
+          ctx.fillStyle = 'rgba(214,40,130,0.3)';
+          ctx.fillRect(x * cs, y * cs, cs, cs);
+          ctx.fillStyle = '#d62882';
+          ctx.fillRect(x * cs, (y + 1) * cs - bar, cs, bar);
+        }
+    }
+    if (s.mirrorX || s.mirrorY) {
+      // Symmetry axes.
+      const W = s.design.cols * cs, H = s.design.rows * cs;
+      ctx.strokeStyle = '#d62882';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      if (s.mirrorX) { ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); }
+      if (s.mirrorY) { ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     const fill = preview.current;
     if (fill) {
@@ -96,7 +127,7 @@ export function ChartCanvas({ zoom }: { zoom: number }) {
     canvas.width = Math.round(size.w * dpr);
     canvas.height = Math.round(size.h * dpr);
     draw();
-  }, [design, selection, floating, size.w, size.h, dpr, draw]);
+  }, [design, selection, floating, floatMask, mirrorX, mirrorY, size.w, size.h, dpr, draw]);
 
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
 
@@ -250,5 +281,3 @@ export function ChartCanvas({ zoom }: { zoom: number }) {
     />
   );
 }
-
-export { GUTTER };

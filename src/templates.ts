@@ -27,6 +27,8 @@ function fromFn(
     gauge: { sts: 22, rows: 24 },
     repeatX: 2,
     repeatY: 1,
+    shape: 'flat',
+    around: 8,
     updatedAt: Date.now(),
     ...extra,
   };

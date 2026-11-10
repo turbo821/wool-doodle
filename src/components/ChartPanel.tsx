@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import { SYMBOLS, clamp } from '../model';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { SYMBOLS, clamp, longFloats } from '../model';
+import { GUTTER } from '../render/chart';
 import { store, useApp } from '../store';
 import { ChartCanvas } from './ChartCanvas';
 import { Icon } from './Icon';
-import { Dropdown } from './ui';
+import { Dropdown, NumInput } from './ui';
+
+const ZMIN = 4, ZMAX = 46;
 
 function ReplaceForm({ close }: { close: () => void }) {
   const yarns = useApp((s) => s.design.yarns);
@@ -44,7 +47,44 @@ export function ChartPanel() {
   const selection = useApp((s) => s.selection);
   const floating = useApp((s) => s.floating);
   const design = useApp((s) => s.design);
-  const [zoom, setZoom] = useState(22);
+  const [zoom, setZoom] = useState<number | 'fit'>('fit');
+  const [floatsOn, setFloatsOn] = useState(false);
+  const [floatLimit, setFloatLimit] = useState(5);
+  const scroll = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 600, h: 400 });
+
+  useLayoutEffect(() => {
+    const el = scroll.current!;
+    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+
+  // 28 px of padding plus the number gutters; a little slack keeps scrollbars from appearing.
+  const fit = clamp(
+    Math.floor(Math.min((box.w - 34 - GUTTER) / design.cols, (box.h - 34 - GUTTER) / design.rows)),
+    ZMIN,
+    ZMAX,
+  );
+  const cs = zoom === 'fit' ? fit : zoom;
+  const csRef = useRef(cs);
+  csRef.current = cs;
+
+  useEffect(() => {
+    const el = scroll.current!;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoom(clamp(csRef.current + (e.deltaY < 0 ? 2 : -2), ZMIN, ZMAX));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const floatMask = useMemo(() => (floatsOn ? longFloats(design, floatLimit) : null), [floatsOn, floatLimit, design]);
+  const floatCount = floatMask ? floatMask.reduce((n, m) => n + (m ? 1 : 0), 0) : 0;
   const scope = floating ? 'вставляемый фрагмент' : selection ? 'выделение' : 'вся схема';
   const item = (label: string, fn: () => void, close: () => void, disabled = false) => (
     <button
@@ -98,12 +138,28 @@ export function ChartPanel() {
         </div>
         <div className="bar-group end">
           <span className="scope">{selection ? `${selection.w} × ${selection.h}` : `${design.cols} × ${design.rows}`}</span>
-          <button className="icon-btn" title="Мельче" onClick={() => setZoom((z) => clamp(z - 3, 5, 46))}><Icon name="minus" /></button>
-          <button className="icon-btn" title="Крупнее" onClick={() => setZoom((z) => clamp(z + 3, 5, 46))}><Icon name="plus" /></button>
+          <button className="icon-btn" title="Мельче (Ctrl + колесо)" onClick={() => setZoom(clamp(cs - 3, ZMIN, ZMAX))}><Icon name="minus" /></button>
+          <button className="icon-btn" title="Крупнее (Ctrl + колесо)" onClick={() => setZoom(clamp(cs + 3, ZMIN, ZMAX))}><Icon name="plus" /></button>
+          <button className={`btn small${zoom === 'fit' ? ' active' : ''}`} onClick={() => setZoom('fit')}>Вписать</button>
         </div>
       </header>
-      <div className="chart-scroll">
-        <ChartCanvas zoom={zoom} />
+      <div className="panel-subbar">
+        <label className="check" title="Подсветить места, где нить другого цвета идёт за работой слишком долго. Ряд считается вязаным по кругу.">
+          <input type="checkbox" checked={floatsOn} onChange={(e) => setFloatsOn(e.target.checked)} /> Длинные протяжки
+        </label>
+        {floatsOn && (
+          <>
+            <span className="bar-num">
+              <NumInput label="длиннее, петель" value={floatLimit} min={2} max={30} onCommit={setFloatLimit} />
+            </span>
+            <span className={`float-count${floatCount ? ' warn' : ''}`}>
+              {floatCount ? `Отмечено петель: ${floatCount}` : 'Длинных протяжек нет'}
+            </span>
+          </>
+        )}
+      </div>
+      <div className="chart-scroll" ref={scroll}>
+        <ChartCanvas zoom={cs} floatMask={floatMask} />
       </div>
       {floating && !floating.lifted && (
         <div className="toast-inline">Щёлкните по схеме, чтобы вставить фрагмент · <kbd>Esc</kbd> — отмена</div>
